@@ -12,24 +12,21 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(64, 64, 64, 64)
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(64, 64, 64, 64)
+        
+        val tvInfo = TextView(this)
+        tvInfo.text = "1. Enable Accessibility Service\n2. Allow Display Over Other Apps"
+        tvInfo.textSize = 18f
+        
+        val btnAccessibility = Button(this)
+        btnAccessibility.text = "Open Accessibility Settings"
+        btnAccessibility.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         
-        val text = TextView(this).apply {
-            text = "1. Enable Accessibility Service\n2. Allow Display Over Other Apps"
-            textSize = 18f
-        }
-        
-        val btnAccessibility = Button(this).apply {
-            text = "Open Accessibility Settings"
-            setOnClickListener {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
-        }
-        
-        layout.addView(text)
+        layout.addView(tvInfo)
         layout.addView(btnAccessibility)
         setContentView(layout)
     }
