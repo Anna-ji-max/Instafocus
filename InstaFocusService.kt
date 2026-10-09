@@ -22,7 +22,6 @@ class InstaFocusService : AccessibilityService() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
@@ -31,31 +30,46 @@ class InstaFocusService : AccessibilityService() {
         val inflater = LayoutInflater.from(this)
         overlayView = inflater.inflate(R.layout.loading_overlay, null)
         overlayView?.layoutParams = params
-        overlayView?.setOnTouchListener { _, _ -> true }
+
+        // Emergency Safety: Double-tapping the overlay force-dismisses it
+        var lastTapTime = 0L
+        overlayView?.setOnTouchListener { _, event ->
+            val currentTime = System.currentTimeMillis()
+            if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                if (currentTime - lastTapTime < 300) {
+                    hideOverlay() // Double tap safety override
+                }
+                lastTapTime = currentTime
+            }
+            true // Intercept touches on blocked content
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null || event.packageName?.toString() != "com.instagram.android") {
+        // SAFETY CHECK 1: Instantly strip overlay if not actively inside Instagram
+        val currentPackage = event?.packageName?.toString()
+        if (currentPackage == null || currentPackage != "com.instagram.android") {
             hideOverlay()
             return
         }
 
-        val root = rootInActiveWindow ?: return
+        val root = rootInActiveWindow
+        if (root == null) {
+            hideOverlay()
+            return
+        }
 
-        // Check for specific Reels player signatures
-        val isReelsTab = findNodeByTextOrDescription(root, "Reels viewer") ||
-                         findNodeByTextOrDescription(root, "Audio by") ||
-                         findNodeByTextOrDescription(root, "Original audio")
+        // Targeted Reels and Explore detection
+        val isReels = findNodeByTextOrDescription(root, "Reels viewer") ||
+                      findNodeByTextOrDescription(root, "Audio by")
+        
+        val isSearch = findNodeByTextOrDescription(root, "Search and explore")
 
-        // Check for Search grid signature
-        val isSearchGrid = findNodeByTextOrDescription(root, "Search and explore")
+        // Exclude active chat windows
+        val isChat = findNodeByTextOrDescription(root, "Message...") ||
+                     findNodeByTextOrDescription(root, "Audio call")
 
-        // Check if user is actively inside an open Chat thread
-        val isInsideChatThread = findNodeByTextOrDescription(root, "Message...") ||
-                                 findNodeByTextOrDescription(root, "Audio call") ||
-                                 findNodeByTextOrDescription(root, "Video call")
-
-        if ((isReelsTab || isSearchGrid) && !isInsideChatThread) {
+        if ((isReels || isSearch) && !isChat) {
             showOverlay()
         } else {
             hideOverlay()
@@ -99,6 +113,11 @@ class InstaFocusService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        hideOverlay()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
         hideOverlay()
     }
 }
