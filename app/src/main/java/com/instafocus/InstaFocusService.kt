@@ -16,6 +16,7 @@ class InstaFocusService : AccessibilityService() {
 
     override fun onServiceConnected() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -26,26 +27,35 @@ class InstaFocusService : AccessibilityService() {
             PixelFormat.TRANSLUCENT
         )
         params.gravity = Gravity.TOP or Gravity.START
-        
-        overlayView = LayoutInflater.from(this).inflate(R.layout.loading_overlay, null)
+
+        val inflater = LayoutInflater.from(this)
+        overlayView = inflater.inflate(R.layout.loading_overlay, null)
+        overlayView?.layoutParams = params
         overlayView?.setOnTouchListener { _, _ -> true }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.packageName?.toString() != "com.instagram.android") {
+        if (event == null || event.packageName?.toString() != "com.instagram.android") {
             hideOverlay()
             return
         }
 
         val root = rootInActiveWindow ?: return
-        
-        val isReels = findNodeByTextOrDescription(root, "Reels")
-        val isSearch = findNodeByTextOrDescription(root, "Search")
-        val isHighlights = findNodeByTextOrDescription(root, "Highlights")
-        val isChat = findNodeByTextOrDescription(root, "Message") || findNodeByTextOrDescription(root, "Chat")
-        val isCamera = findNodeByTextOrDescription(root, "Camera")
-        
-        if ((isReels || isSearch || isHighlights) && !isChat && !isCamera) {
+
+        // Check for specific Reels player signatures
+        val isReelsTab = findNodeByTextOrDescription(root, "Reels viewer") ||
+                         findNodeByTextOrDescription(root, "Audio by") ||
+                         findNodeByTextOrDescription(root, "Original audio")
+
+        // Check for Search grid signature
+        val isSearchGrid = findNodeByTextOrDescription(root, "Search and explore")
+
+        // Check if user is actively inside an open Chat thread
+        val isInsideChatThread = findNodeByTextOrDescription(root, "Message...") ||
+                                 findNodeByTextOrDescription(root, "Audio call") ||
+                                 findNodeByTextOrDescription(root, "Video call")
+
+        if ((isReelsTab || isSearchGrid) && !isInsideChatThread) {
             showOverlay()
         } else {
             hideOverlay()
@@ -53,31 +63,35 @@ class InstaFocusService : AccessibilityService() {
     }
 
     private fun showOverlay() {
-        if (!isOverlayShowing) {
+        if (!isOverlayShowing && overlayView != null) {
             try {
                 windowManager?.addView(overlayView, overlayView?.layoutParams)
                 isOverlayShowing = true
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
     private fun hideOverlay() {
-        if (isOverlayShowing) {
+        if (isOverlayShowing && overlayView != null) {
             try {
                 windowManager?.removeView(overlayView)
                 isOverlayShowing = false
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
-    private fun findNodeByTextOrDescription(node: AccessibilityNodeInfo, keyword: String): Boolean {
+    private fun findNodeByTextOrDescription(node: AccessibilityNodeInfo?, keyword: String): Boolean {
+        if (node == null) return false
         if (node.text?.contains(keyword, true) == true || 
             node.contentDescription?.contains(keyword, true) == true) {
             return true
         }
         for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            if (child != null && findNodeByTextOrDescription(child, keyword)) {
+            if (findNodeByTextOrDescription(node.getChild(i), keyword)) {
                 return true
             }
         }
